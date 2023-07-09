@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch.nn.utils import weight_norm
+import torch.distributions.normal as normal_dist
+import torch.distributions.uniform as uniform_dist
 
 from dac.nn.layers import WNConv1d
 
@@ -107,14 +109,17 @@ class ResidualVectorQuantize(nn.Module):
         codebook_size: int = 1024,
         codebook_dim: Union[int, list] = 8,
         quantizer_dropout: float = 0.0,
+        use_nsvq: bool = False,
     ):
         super().__init__()
         if isinstance(codebook_dim, int):
             codebook_dim = [codebook_dim for _ in range(n_codebooks)]
 
+        self.eps = 1e-5
         self.n_codebooks = n_codebooks
         self.codebook_dim = codebook_dim
         self.codebook_size = codebook_size
+        self.use_nsvq = use_nsvq
 
         self.quantizers = nn.ModuleList(
             [
@@ -161,6 +166,8 @@ class ResidualVectorQuantize(nn.Module):
         codebook_indices = []
         latents = []
 
+        should_use_nsvq = self.use_nsvq and self.training
+        
         if n_quantizers is None:
             n_quantizers = self.n_codebooks
         if self.training:
@@ -169,6 +176,27 @@ class ResidualVectorQuantize(nn.Module):
             n_dropout = int(z.shape[0] * self.quantizer_dropout)
             n_quantizers[:n_dropout] = dropout[:n_dropout]
             n_quantizers = n_quantizers.to(z.device)
+            
+        if should_use_nsvq:
+            # Estimate the quantization error ahead of time
+            for i, quantizer in enumerate(self.quantizers):
+                if i >= n_quantizers:
+                    break
+
+                z_q_i= quantizer(residual)
+                mask = (torch.full((z.shape[0],), fill_value=i, device=z.device) < n_quantizers)
+                z_q = z_q + z_q_i * mask[:, None, None]
+                residual = residual - z_q_i
+                
+            # defining vector quantization error
+            random_vector = normal_dist.Normal(0, 1).sample(x.shape).to(self.device)
+            norm_quantization_residual = (x - z_q).square().sum(dim=1, keepdim=True).sqrt()
+            norm_random_vector = random_vector.square().sum(dim=1, keepdim=True).sqrt()
+            vq_error = (norm_quantization_residual / norm_random_vector + self.eps) * random_vector
+
+            # Noise the input by a applying the noise over a random normalized distribution on the input
+            residual = z + vq_error
+            z_q = 0
 
         for i, quantizer in enumerate(self.quantizers):
             if self.training is False and i >= n_quantizers:
