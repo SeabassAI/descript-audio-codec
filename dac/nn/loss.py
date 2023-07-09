@@ -1,11 +1,11 @@
 import typing
 from typing import List
-
 import torch
 import torch.nn.functional as F
 from audiotools import AudioSignal
 from audiotools import STFTParams
 from torch import nn
+import auraloss
 
 
 class L1Loss(nn.L1Loss):
@@ -227,6 +227,74 @@ class MultiScaleSTFTLoss(nn.Module):
             loss += self.mag_weight * self.loss_fn(x.magnitude, y.magnitude)
         return loss
 
+class PerceptualMultiScaleSTFTLoss(nn.Module):
+    """Computes the multi-scale STFT loss from [1].
+
+    Parameters
+    ----------
+    window_lengths : List[int], optional
+        Length of each window of each STFT, by default [2048, 512]
+    loss_fn : typing.Callable, optional
+        How to compare each loss, by default nn.L1Loss()
+    scale : str, optional
+        Spectrogram scale to use 'mel' (by default) or 'chroma'
+    weight : float, optional
+        Overall weight of the loss
+
+    Using implementation from auraloss, which provides a multiscale STFT loss functionj with a perceptual weighting:
+    https://github.com/csteinmetz1/auraloss
+    """
+
+    def __init__(
+        self,
+        window_lengths: List[int] = [2048, 512],
+        loss_fn: typing.Callable = nn.L1Loss(),
+        scale: str = "mel",
+        n_bins: int = 128,
+        sampling_rate: int = 44100,
+        weight: float = 1.0,
+    ):
+        super().__init__()
+        self.window_lengths = window_lengths
+        self.hop_size = [w // 4 for w in window_lengths]
+        self.fft_size = [w * 4 for w in window_lengths]
+        self.loss_fn = loss_fn
+        self.weight = weight
+        self.n_bins = n_bins
+        self.sample_rate = sampling_rate
+        self.scale = scale
+        
+        self.loss_calc = auraloss.freq.MultiResolutionSTFTLoss(
+            fft_sizes=self.fft_size,
+            hop_sizes=self.hop_size,
+            win_lengths=self.window_lengths,
+            scale=self.scale,
+            n_bins=self.n_bins,
+            sample_rate=self.sample_rate,
+            perceptual_weighting=True,
+        )
+        
+        if self.loss_fn:
+            self.loss_calc.distance = self.loss_fn
+        
+    def forward(self, x: AudioSignal, y: AudioSignal):
+        """Computes multi-scale STFT between an estimate and a reference
+        signal.
+
+        Parameters
+        ----------
+        x : AudioSignal
+            Estimate signal
+        y : AudioSignal
+            Reference signal
+
+        Returns
+        -------
+        torch.Tensor
+            Multi-scale STFT loss.
+        """
+        loss = self.loss_calc(x, y)
+        return self.weight * loss
 
 class MelSpectrogramLoss(nn.Module):
     """Compute distance between mel spectrograms. Can be used
