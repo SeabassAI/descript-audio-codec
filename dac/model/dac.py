@@ -151,6 +151,7 @@ class DAC(BaseModel, CodecMixin):
         codebook_dim: Union[int, list] = 8,
         quantizer_dropout: bool = False,
         sample_rate: int = 44100,
+        use_nsvq: bool = False,
     ):
         super().__init__()
 
@@ -173,6 +174,7 @@ class DAC(BaseModel, CodecMixin):
             codebook_size=codebook_size,
             codebook_dim=codebook_dim,
             quantizer_dropout=quantizer_dropout,
+            use_nsvq=use_nsvq,
         )
 
         self.decoder = Decoder(
@@ -181,6 +183,7 @@ class DAC(BaseModel, CodecMixin):
             decoder_rates,
         )
         self.sample_rate = sample_rate
+        self.use_nsvq = use_nsvq
         self.apply(init_weights)
 
     def preprocess(self, audio_data, sample_rate):

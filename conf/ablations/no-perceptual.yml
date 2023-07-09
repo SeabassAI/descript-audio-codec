@@ -1,0 +1,5 @@
+$include:
+  - conf/base.yml
+  - conf/1gpu.yml
+
+use_perceptual_loss: false
