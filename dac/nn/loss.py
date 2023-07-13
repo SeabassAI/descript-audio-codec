@@ -238,6 +238,10 @@ class PerceptualMultiScaleSTFTLoss(nn.Module):
         How to compare each loss, by default nn.L1Loss()
     scale : str, optional
         Spectrogram scale to use 'mel' (by default) or 'chroma'
+    n_bins : int, optional
+        Bins to use for spectrogram, by default 128
+    sampling_rate : int, optional
+        Sampling rate of audio, needed for perceptual model
     weight : float, optional
         Overall weight of the loss
 

@@ -10,6 +10,7 @@ DAC.n_codebooks: 9
 DAC.codebook_size: 1024
 DAC.codebook_dim: 8
 DAC.quantizer_dropout: 1.0
+DAC.use_nsvq: false
 
 # Discriminator
 Discriminator.sample_rate: 44100
@@ -38,6 +39,7 @@ sample_freq: 10000
 num_workers: 32
 val_idx: [0, 1, 2, 3, 4, 5, 6, 7]
 seed: 0
+use_perceptual_loss: true
 lambdas:
   mel/loss: 15.0
   adv/feat_loss: 2.0

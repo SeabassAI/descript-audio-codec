@@ -130,6 +130,7 @@ def load(
     resume: bool = False,
     tag: str = "latest",
     load_weights: bool = False,
+    perceptual_loss: bool = False,
 ):
     generator, g_extra = None, {}
     discriminator, d_extra = None, {}
@@ -178,9 +179,13 @@ def load(
         val_data = build_dataset(sample_rate)
 
     waveform_loss = losses.L1Loss()
-    stft_loss = losses.MultiScaleSTFTLoss()
     mel_loss = losses.MelSpectrogramLoss()
     gan_loss = losses.GANLoss(discriminator)
+
+    if perceptual_loss:
+        stft_loss = losses.PerceptualMultiScaleSTFTLoss()
+    else:
+        stft_loss = losses.MultiScaleSTFTLoss()
 
     return State(
         generator=generator,
@@ -357,6 +362,7 @@ def train(
     batch_size: int = 12,
     val_batch_size: int = 10,
     num_workers: int = 8,
+    use_perceptual_loss: bool = False,
     val_idx: list = [0, 1, 2, 3, 4, 5, 6, 7],
     lambdas: dict = {
         "mel/loss": 100.0,
